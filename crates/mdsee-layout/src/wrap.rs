@@ -10,7 +10,7 @@ use unicode_width::UnicodeWidthStr;
 
 use mdsee_core::Inline;
 
-use crate::model::{LayoutLine, LayoutSpan, SemanticStyle};
+use crate::model::{LayoutLine, LayoutSpan, LinkTarget, SemanticStyle};
 
 /// paragraph等のinline列を `width` 桁に折り返す。
 pub(crate) fn wrap_inlines(
@@ -85,6 +85,7 @@ enum FlatToken {
         cluster: String,
         width: usize,
         style: SemanticStyle,
+        link: Option<String>,
     },
     /// 折り返し可能な空白（通常テキスト内）。
     Space,
@@ -104,15 +105,17 @@ struct Segment {
     text: String,
     width: usize,
     style: SemanticStyle,
+    link: Option<String>,
 }
 
 /// inlineツリーをflat token列へ展開する。
 ///
 /// styleは最も内側の装飾を採用する（strong内のemphasis等）。
+/// linkは内側（`[a [b](u1)](u2)` の u1）を優先する。
 fn flatten(inlines: &[Inline], style: &SemanticStyle, out: &mut Vec<FlatToken>) {
     for inline in inlines {
         match inline {
-            Inline::Text(run) => push_text(&run.content, style, out),
+            Inline::Text(run) => push_text(&run.content, style, None, out),
             Inline::Code(literal) => push_code(literal, out),
             Inline::Emphasis(children) => {
                 flatten(children, &SemanticStyle::Emphasis, out);
@@ -124,7 +127,7 @@ fn flatten(inlines: &[Inline], style: &SemanticStyle, out: &mut Vec<FlatToken>) 
                 flatten(children, &SemanticStyle::Strike, out);
             }
             Inline::Link(link) => {
-                flatten(&link.children, &SemanticStyle::Link, out);
+                flatten_with_link(&link.children, &SemanticStyle::Link, &link.url, out);
             }
             Inline::SoftBreak => out.push(FlatToken::Space),
             Inline::HardBreak => out.push(FlatToken::ForcedBreak),
@@ -132,7 +135,37 @@ fn flatten(inlines: &[Inline], style: &SemanticStyle, out: &mut Vec<FlatToken>) 
     }
 }
 
-fn push_text(content: &str, style: &SemanticStyle, out: &mut Vec<FlatToken>) {
+/// link付きの子を展開する（§12, §33）。
+fn flatten_with_link(
+    inlines: &[Inline],
+    style: &SemanticStyle,
+    url: &str,
+    out: &mut Vec<FlatToken>,
+) {
+    for inline in inlines {
+        match inline {
+            Inline::Text(run) => push_text(&run.content, style, Some(url), out),
+            Inline::Code(literal) => push_code(literal, out),
+            Inline::Emphasis(children) => {
+                flatten_with_link(children, &SemanticStyle::Emphasis, url, out);
+            }
+            Inline::Strong(children) => {
+                flatten_with_link(children, &SemanticStyle::Strong, url, out);
+            }
+            Inline::Strike(children) => {
+                flatten_with_link(children, &SemanticStyle::Strike, url, out);
+            }
+            Inline::Link(inner) => {
+                // 内側linkを優先する
+                flatten_with_link(&inner.children, &SemanticStyle::Link, &inner.url, out);
+            }
+            Inline::SoftBreak => out.push(FlatToken::Space),
+            Inline::HardBreak => out.push(FlatToken::ForcedBreak),
+        }
+    }
+}
+
+fn push_text(content: &str, style: &SemanticStyle, link: Option<&str>, out: &mut Vec<FlatToken>) {
     for cluster in content.graphemes(true) {
         if cluster == " " {
             out.push(FlatToken::Space);
@@ -142,6 +175,7 @@ fn push_text(content: &str, style: &SemanticStyle, out: &mut Vec<FlatToken>) {
                 cluster: cluster.to_string(),
                 width: UnicodeWidthStr::width(cluster),
                 style: *style,
+                link: link.map(str::to_string),
             });
         }
     }
@@ -155,6 +189,7 @@ fn push_code(literal: &str, out: &mut Vec<FlatToken>) {
             cluster: cluster.to_string(),
             width: UnicodeWidthStr::width(cluster),
             style: SemanticStyle::InlineCode,
+            link: None,
         });
     }
 }
@@ -164,7 +199,7 @@ fn push_code(literal: &str, out: &mut Vec<FlatToken>) {
 /// `Space`はwordの区切り。連続する空白は1つに畳み、行頭の空白は除去する。
 fn tokenize(flat: Vec<FlatToken>) -> Vec<Token> {
     let mut tokens = Vec::new();
-    let mut word: Vec<(String, usize, SemanticStyle)> = Vec::new();
+    let mut word: Vec<(String, usize, SemanticStyle, Option<String>)> = Vec::new();
 
     for token in flat {
         match token {
@@ -172,7 +207,8 @@ fn tokenize(flat: Vec<FlatToken>) -> Vec<Token> {
                 cluster,
                 width,
                 style,
-            } => word.push((cluster, width, style)),
+                link,
+            } => word.push((cluster, width, style, link)),
             FlatToken::Space => {
                 flush_word(&mut word, &mut tokens);
                 if !matches!(tokens.last(), Some(Token::Space) | None) {
@@ -191,8 +227,11 @@ fn tokenize(flat: Vec<FlatToken>) -> Vec<Token> {
 
 /// word内のgrapheme列を、break可能境界で分割されたsegment列へ変換する。
 ///
-/// 境界は (1) styleの切り替わり (2) CJK文字の前後（§23 grapheme boundary）。
-fn flush_word(word: &mut Vec<(String, usize, SemanticStyle)>, tokens: &mut Vec<Token>) {
+/// 境界は (1) style / linkの切り替わり (2) CJK文字の前後（§23 grapheme boundary）。
+fn flush_word(
+    word: &mut Vec<(String, usize, SemanticStyle, Option<String>)>,
+    tokens: &mut Vec<Token>,
+) {
     if word.is_empty() {
         return;
     }
@@ -200,17 +239,20 @@ fn flush_word(word: &mut Vec<(String, usize, SemanticStyle)>, tokens: &mut Vec<T
     let mut segments: Vec<Segment> = Vec::new();
     let mut prev_ends_breakable = false;
 
-    for (cluster, width, style) in word.drain(..) {
+    for (cluster, width, style, link) in word.drain(..) {
         let starts_breakable = cluster.chars().next().is_some_and(is_cjk_breakable);
         let need_new_segment = match segments.last() {
             None => true,
-            Some(last) => last.style != style || prev_ends_breakable || starts_breakable,
+            Some(last) => {
+                last.style != style || last.link != link || prev_ends_breakable || starts_breakable
+            }
         };
         if need_new_segment {
             segments.push(Segment {
                 text: String::new(),
                 width: 0,
                 style,
+                link,
             });
         }
         let last = segments.last_mut().expect("segment just pushed");
@@ -238,11 +280,14 @@ fn is_cjk_breakable(c: char) -> bool {
 
 /// 行頭でも収まらないsegmentをgrapheme単位で分割する（§23）。
 fn split_hard(segment: Segment, width: usize) -> Vec<Segment> {
+    let style = segment.style;
+    let link = segment.link;
     let mut chunks = Vec::new();
     let mut current = Segment {
         text: String::new(),
         width: 0,
-        style: segment.style,
+        style,
+        link: link.clone(),
     };
     for cluster in segment.text.graphemes(true) {
         let width_of = UnicodeWidthStr::width(cluster);
@@ -252,7 +297,8 @@ fn split_hard(segment: Segment, width: usize) -> Vec<Segment> {
                 Segment {
                     text: String::new(),
                     width: 0,
-                    style: segment.style,
+                    style,
+                    link: link.clone(),
                 },
             ));
         }
@@ -277,14 +323,15 @@ fn append_space(current: &mut [Segment]) {
 fn finish_line(segments: Vec<Segment>) -> LayoutLine {
     let mut spans: Vec<LayoutSpan> = Vec::with_capacity(segments.len());
     for segment in segments {
+        let link_target = segment.link.map(|url| LinkTarget { url });
         match spans.last_mut() {
-            Some(last) if last.style == segment.style => {
+            Some(last) if last.style == segment.style && last.link == link_target => {
                 last.content.push_str(&segment.text);
             }
             _ => spans.push(LayoutSpan {
                 content: segment.text,
                 style: segment.style,
-                link: None,
+                link: link_target,
             }),
         }
     }
@@ -294,7 +341,7 @@ fn finish_line(segments: Vec<Segment>) -> LayoutLine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mdsee_core::TextRun;
+    use mdsee_core::{Link, TextRun};
 
     fn text(content: &str) -> Vec<Inline> {
         vec![Inline::Text(TextRun {
@@ -437,6 +484,61 @@ mod tests {
         ];
         let lines = wrap_inlines(&inlines, 40, SemanticStyle::Body);
         assert_eq!(line_texts(&lines), ["x a  b"]);
+    }
+
+    #[test]
+    fn link_url_is_carried_to_spans() {
+        // §33: linkのURLはspanへ carried され、OSC 8 / plain fallbackに使われる
+        let inlines = vec![Inline::Link(Link {
+            url: "https://example.com".to_string(),
+            title: None,
+            children: vec![Inline::Text(TextRun {
+                content: "site".to_string(),
+            })],
+        })];
+        let lines = wrap_inlines(&inlines, 40, SemanticStyle::Body);
+        assert_eq!(line_texts(&lines), ["site"]);
+        assert_eq!(lines[0].spans.len(), 1);
+        assert_eq!(
+            lines[0].spans[0].link.as_ref().map(|l| l.url.as_str()),
+            Some("https://example.com")
+        );
+        assert_eq!(lines[0].spans[0].style, SemanticStyle::Link);
+    }
+
+    #[test]
+    fn different_links_do_not_merge() {
+        let inlines = vec![
+            Inline::Link(Link {
+                url: "https://a.example".to_string(),
+                title: None,
+                children: vec![Inline::Text(TextRun {
+                    content: "aa".to_string(),
+                })],
+            }),
+            Inline::Text(TextRun {
+                content: " ".to_string(),
+            }),
+            Inline::Link(Link {
+                url: "https://b.example".to_string(),
+                title: None,
+                children: vec![Inline::Text(TextRun {
+                    content: "bb".to_string(),
+                })],
+            }),
+        ];
+        let lines = wrap_inlines(&inlines, 40, SemanticStyle::Body);
+        assert_eq!(line_texts(&lines), ["aa bb"]);
+        // 単語間の空白は直前segment（link a）に吸収される
+        let links: Vec<Option<&str>> = lines[0]
+            .spans
+            .iter()
+            .map(|s| s.link.as_ref().map(|l| l.url.as_str()))
+            .collect();
+        assert_eq!(
+            links,
+            vec![Some("https://a.example"), Some("https://b.example")]
+        );
     }
 
     #[test]

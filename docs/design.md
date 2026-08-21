@@ -169,6 +169,10 @@ Directories
 
 Hash
   sha2
+
+Logging
+  tracing
+  tracing-subscriber
 ```
 
 Markdown parserは、今回は `pulldown-cmark` より `comrak` を第一候補とする。
@@ -849,12 +853,27 @@ Unicode不可の場合：
 [x] done
 ```
 
+tight / loose：
+
+```rust
+pub struct List {
+    pub ordered: bool,
+    pub start: u64,
+    pub tight: bool,
+    pub items: Vec<ListItem>,
+    pub span: SourceSpan,
+}
+```
+
+`tight` はcomrakの判定をそのまま保持する。tight listは項目間に空行を挟まず、loose listは項目間に空行を1行入れる。
+
 ### 26. Blockquote
 
 ```text
-│ quoted text
-│ continues here
+│ quoted text continues here
 ```
+
+ソース上の soft break（`> quoted text\n> continues here`）はCommonMarkの通常テキストと同じくspaceとして扱い、本文幅で再wrapする。ソース行の改行位置は保持しない。上の例は幅が足りなければ複数行に折り返される。
 
 nested quote：
 
@@ -1029,6 +1048,8 @@ TERM_PROGRAM
 を考慮する。
 
 `NO_COLOR` を優先。
+
+`NO_COLOR` は規約（no-color.org）どおり「空文字以外の値が設定されている」ときに発動する。空文字での設定は未設定と同じ扱い。
 
 ### 36. GraphicsProtocol
 
@@ -1697,7 +1718,7 @@ Markdownをplain textへrender。
 
 ### 72. NO_COLOR
 
-`NO_COLOR` が存在すれば、
+`NO_COLOR` が空文字以外の値で存在すれば（§35）、
 
 ```text
 color = false
@@ -1793,6 +1814,8 @@ pub struct BlockId(u64);
 Reader、search、TOC、source mapに共通利用する。
 
 Parse時に連番発行。
+
+発行順はpre-order（親Blockが子Blockより先、兄弟はsource順）。source mapの行順と一致する。
 
 ### 76. キャッシュ戦略
 
