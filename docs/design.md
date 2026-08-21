@@ -2042,7 +2042,7 @@ SHA256
 
 手動更新しない。
 
-**現状**: tap repositoryが未作成のため、release.ymlの `bump-homebrew` jobはno-opの雛形であり、**自動更新は未有効**。tap repository作成後にversion / URL / SHA256の自動更新を有効化する。
+**現状**: `kotsutsumi/homebrew-tap` を作成し、`Formula/mdsee.rb` を配置済み。release.ymlの `bump-homebrew` jobは、GitHub Releaseの4 platform（macOS arm64 / x86_64、Linux arm64 / x86_64）のasset SHA256を取得してformulaを自動更新し、`HOMEBREW_TAP_TOKEN` でtap repositoryへpushする。利用者は `brew tap kotsutsumi/tap && brew install kotsutsumi/tap/mdsee` で導入できる。
 
 ### 90. Cargo Install
 
@@ -2059,7 +2059,7 @@ cargo install mdsee
 
 crates.io package名も可能なら `mdsee` を確保する。
 
-**リリース条件**: v0.1リリース時は `cargo publish --dry-run` が成功することと、crates.io上の `mdsee` 名の公開確認（未登録であることの再確認とpublish）をリリース条件とする。2026-08時点で `mdsee` はcrates.ioに未登録（取得可能）を確認済み。
+**リリース条件**: v0.1リリース時は `cargo publish --dry-run` が成功することと、crates.io上の `mdsee` 名の公開確認（未登録であることの再確認とpublish）をリリース条件とする。2026-08-21に `mdsee` およびworkspaceの7 crateをv0.1.0として公開し、crates.ioからのinstallと `mdsee README.md` の実行を確認済み。
 
 ### 91. Binary Size
 
