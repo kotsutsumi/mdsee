@@ -610,7 +610,9 @@ dependencies = [
  "mdsee-core",
  "mdsee-layout",
  "mdsee-terminal",
+ "syntect",
  "thiserror",
+ "unicode-width",
 ]
 
 [[package]]
