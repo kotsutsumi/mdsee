@@ -2042,7 +2042,7 @@ SHA256
 
 手動更新しない。
 
-**現状**: `kotsutsumi/homebrew-tap` を作成し、`Formula/mdsee.rb` を配置済み。release.ymlの `bump-homebrew` jobは、GitHub Releaseの4 platform（macOS arm64 / x86_64、Linux arm64 / x86_64）のasset SHA256を取得してformulaを自動更新し、`HOMEBREW_TAP_TOKEN` でtap repositoryへpushする。利用者は `brew tap kotsutsumi/tap && brew install mdsee` で導入できる。
+**現状**: `kotsutsumi/homebrew-tap` を作成し、`Formula/mdsee.rb` を配置済み。release.ymlの `bump-homebrew` jobは、GitHub Releaseの4 platform（macOS arm64 / x86_64、Linux arm64 / x86_64）のasset SHA256を取得してformulaを自動更新し、`HOMEBREW_TAP_TOKEN` でtap repositoryへpushする。利用者は `brew tap kotsutsumi/tap && brew install kotsutsumi/tap/mdsee` で導入できる。
 
 ### 90. Cargo Install
 
