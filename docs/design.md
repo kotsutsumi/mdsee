@@ -677,6 +677,8 @@ pub enum SemanticStyle {
 
     Code,
 
+    Border,
+
     AlertNote,
     AlertTip,
     AlertImportant,
@@ -684,6 +686,8 @@ pub enum SemanticStyle {
     AlertCaution,
 }
 ```
+
+`Border` は §61 の `Theme.border` に対応し、見出しの罫線・code blockの枠・alertの枠で使う。
 
 Theme側で実際の色へ変換。
 
@@ -725,10 +729,14 @@ unicode-segmentation
 pub struct LayoutContext {
     pub terminal_width: u16,
     pub content_width: u16,
-    pub theme: Theme,
-    pub capabilities: TerminalCapabilities,
 }
 ```
+
+`LayoutContext` は幅の情報だけを持つ。
+
+`Theme` はrender段階の責務（§19）であり、`TerminalCapabilities` はmdsee-terminalの型である。layoutへ載せると §101 の依存方向（layout → terminal 禁止）に反するため、どちらも持たない。
+
+画像配置（S4-9）が必要とする情報は、natural pixel寸法などのmetadataとして個別に渡す。`TerminalCapabilities` 自体は渡さない。
 
 本文幅：
 
