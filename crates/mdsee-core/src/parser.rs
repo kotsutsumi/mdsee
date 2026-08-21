@@ -2,12 +2,12 @@
 //!
 //! Comrak ASTを再帰的にInternal ASTへ変換する。
 
-use comrak::nodes::{AstNode, NodeValue, Sourcepos};
+use comrak::nodes::{AstNode, ListType, NodeValue, Sourcepos};
 use comrak::{parse_document, Arena, Options};
 
 use crate::ast::{
-    Block, BlockId, CodeBlock, Document, DocumentMetadata, Heading, Inline, Link, Paragraph,
-    SourceSpan, TextRun,
+    Block, BlockId, BlockQuote, CodeBlock, Document, DocumentMetadata, Heading, Inline, Link, List,
+    ListItem, Paragraph, SourceSpan, TextRun,
 };
 use crate::error::ParseError;
 use crate::input::SourceDocument;
@@ -49,11 +49,12 @@ pub fn parse(source: &SourceDocument) -> Result<Document, ParseError> {
 
 /// comrak拡張の有効化。
 ///
-/// Sprint 1ではstrikethroughのみ（S1-6の変換対象と対応）。
-/// table / tasklist / alerts等は担当Sprintで有効化する。
+/// tasklistは§25のtask list対応。strikethroughはSprint 1で有効化済み。
+/// table / alerts等は担当Sprintで有効化する。
 fn parser_options() -> Options<'static> {
     let mut options = Options::default();
     options.extension.strikethrough = true;
+    options.extension.tasklist = true;
     options
 }
 
@@ -99,6 +100,31 @@ fn convert_block<'a>(node: &'a AstNode<'a>, ids: &mut IdGenerator) -> Vec<Block>
             span,
             id: ids.issue(),
         })],
+        NodeValue::BlockQuote => {
+            // §75: 親が子より先にIDを受け取る（pre-order）
+            let id = ids.issue();
+            vec![Block::BlockQuote(BlockQuote {
+                children: convert_children(node, ids),
+                span,
+                id,
+            })]
+        }
+        NodeValue::List(list) => {
+            let id = ids.issue();
+            let items = node
+                .children()
+                .map(|item| convert_list_item(item, ids))
+                .collect();
+            vec![Block::List(List {
+                ordered: list.list_type == ListType::Ordered,
+                start: list.start as u64,
+                tight: list.tight,
+                items,
+                span,
+                id,
+            })]
+        }
+        NodeValue::ThematicBreak => vec![Block::HorizontalRule],
         NodeValue::HtmlBlock(html) => {
             // §15: block HTMLはtagを除去してtext fallbackする。
             let text = strip_html_tags(&html.literal);
@@ -118,6 +144,25 @@ fn convert_block<'a>(node: &'a AstNode<'a>, ids: &mut IdGenerator) -> Vec<Block>
         // Sprint 2/3で対応するblock（list / blockquote / thematic break / table /
         // alert等）は、対応までの間は子を透過的に走査してparagraph等を拾う。
         _ => convert_children(node, ids),
+    }
+}
+
+/// list直下のitem（`Item` / `TaskItem`）を変換する（§25）。
+fn convert_list_item<'a>(node: &'a AstNode<'a>, ids: &mut IdGenerator) -> ListItem {
+    let ast = node.data.borrow();
+    let span = to_span(&ast.sourcepos);
+    let task = match &ast.value {
+        NodeValue::TaskItem(task) => Some(task.symbol.is_some()),
+        _ => None,
+    };
+    drop(ast);
+
+    let id = ids.issue();
+    ListItem {
+        task,
+        children: convert_children(node, ids),
+        span,
+        id,
     }
 }
 
@@ -331,7 +376,7 @@ mod tests {
 
     #[test]
     fn block_ids_are_sequential() {
-        let doc = parse_md("# a\n\ntext\n\n```sh\nls\n```\n");
+        let doc = parse_md("# a\n\ntext\n\n> quote\n\n- item\n");
         let ids: Vec<BlockId> = doc
             .blocks
             .iter()
@@ -339,19 +384,125 @@ mod tests {
                 Block::Heading(h) => h.id,
                 Block::Paragraph(p) => p.id,
                 Block::CodeBlock(c) => c.id,
+                Block::BlockQuote(q) => q.id,
+                Block::List(l) => l.id,
+                Block::HorizontalRule => panic!("unexpected rule"),
             })
             .collect();
-        assert_eq!(ids, vec![BlockId::new(0), BlockId::new(1), BlockId::new(2)]);
+        // §75: pre-order（親が子より先）で連番発行される。
+        // heading=0, para=1, quote=2, quote内para=3, list=4, item=5, item内para=6
+        assert_eq!(
+            ids,
+            vec![
+                BlockId::new(0),
+                BlockId::new(1),
+                BlockId::new(2),
+                BlockId::new(4)
+            ]
+        );
+        let Block::List(list) = &doc.blocks[3] else {
+            panic!("expected list");
+        };
+        assert_eq!(list.items[0].id, BlockId::new(5));
     }
 
     #[test]
-    fn unsupported_blocks_are_transparent() {
-        // listはSprint 2（S2-1）で対応。それまでの間は子paragraphが透過される。
-        let doc = parse_md("- one\n- two\n");
-        assert_eq!(doc.blocks.len(), 2);
-        let Block::Paragraph(p) = &doc.blocks[0] else {
-            panic!("expected transparent paragraph");
+    fn parses_bullet_list_with_nesting() {
+        let doc = parse_md("- one\n  - child\n");
+        assert_eq!(doc.blocks.len(), 1);
+        let Block::List(list) = &doc.blocks[0] else {
+            panic!("expected list");
+        };
+        assert!(!list.ordered);
+        assert!(list.tight);
+        assert_eq!(list.items.len(), 1);
+
+        // ネストは item の子として現れる（comrak ASTどおり）
+        let item = &list.items[0];
+        let Block::Paragraph(p) = &item.children[0] else {
+            panic!("expected paragraph");
         };
         assert_eq!(plain_text(&p.inlines), "one");
+        let Block::List(nested) = &item.children[1] else {
+            panic!("expected nested list");
+        };
+        assert_eq!(nested.items.len(), 1);
+        let Block::Paragraph(child) = &nested.items[0].children[0] else {
+            panic!("expected paragraph in nested item");
+        };
+        assert_eq!(plain_text(&child.inlines), "child");
+    }
+
+    #[test]
+    fn loose_list_is_not_tight() {
+        let doc = parse_md("- a\n\n- b\n");
+        let Block::List(list) = &doc.blocks[0] else {
+            panic!("expected list");
+        };
+        assert!(!list.tight);
+    }
+
+    fn plain_text_of_item(item: &ListItem) -> String {
+        let Block::Paragraph(p) = &item.children[0] else {
+            panic!("expected paragraph in item");
+        };
+        plain_text(&p.inlines)
+    }
+
+    #[test]
+    fn parses_ordered_list_start_number() {
+        let doc = parse_md("3. three\n4. four\n");
+        let Block::List(list) = &doc.blocks[0] else {
+            panic!("expected list");
+        };
+        assert!(list.ordered);
+        assert_eq!(list.start, 3);
+        assert_eq!(list.items.len(), 2);
+    }
+
+    #[test]
+    fn parses_task_list_checked_state() {
+        let doc = parse_md("- [ ] todo\n- [x] done\n");
+        let Block::List(list) = &doc.blocks[0] else {
+            panic!("expected list");
+        };
+        assert_eq!(list.items[0].task, Some(false));
+        assert_eq!(list.items[1].task, Some(true));
+        assert_eq!(plain_text_of_item(&list.items[0]), "todo");
+        assert_eq!(plain_text_of_item(&list.items[1]), "done");
+    }
+
+    #[test]
+    fn parses_blockquote_with_children() {
+        let doc = parse_md("> quoted text\n> more\n");
+        assert_eq!(doc.blocks.len(), 1);
+        let Block::BlockQuote(quote) = &doc.blocks[0] else {
+            panic!("expected blockquote");
+        };
+        assert_eq!(quote.children.len(), 1);
+        let Block::Paragraph(p) = &quote.children[0] else {
+            panic!("expected paragraph in quote");
+        };
+        // soft breakはquote内でも保持される
+        assert!(p.inlines.contains(&Inline::SoftBreak));
+    }
+
+    #[test]
+    fn parses_nested_blockquote() {
+        let doc = parse_md("> outer\n> > inner\n");
+        let Block::BlockQuote(outer) = &doc.blocks[0] else {
+            panic!("expected blockquote");
+        };
+        let Block::BlockQuote(inner) = &outer.children[1] else {
+            panic!("expected nested blockquote");
+        };
+        assert_eq!(inner.children.len(), 1);
+    }
+
+    #[test]
+    fn parses_thematic_break() {
+        let doc = parse_md("above\n\n---\n\nbelow\n");
+        assert_eq!(doc.blocks.len(), 3);
+        assert_eq!(doc.blocks[1], Block::HorizontalRule);
     }
 }
