@@ -5,7 +5,7 @@
 use mdsee_terminal::ColorLevel;
 
 /// RGB色。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Rgb(pub u8, pub u8, pub u8);
 
 /// 表示属性。§61の `TextStyle` と同型。

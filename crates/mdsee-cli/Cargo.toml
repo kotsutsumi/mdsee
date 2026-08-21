@@ -1,14 +1,22 @@
 [package]
-name = "mdsee-cli"
+name = "mdsee"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Markdown viewer for your terminal"
+readme = "../../README.md"
 
 [[bin]]
 name = "mdsee"
 path = "src/main.rs"
+
+# §92: feature flags。画像系（images/sixel/svg/mermaid/math）と
+# reader/network は担当Sprintで有効化する。Homebrew buildでは
+# 全部入り（--all-features）で配布する。
+[features]
+default = ["syntax"]
+syntax = ["mdsee-render/syntax"]
 
 [dependencies]
 mdsee-core.workspace = true

@@ -1,0 +1,18 @@
+  {1;38;2;63;185;80}Emoji{/}
+  {38;2;48;54;61}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{/}
+
+  Emoji count as two columns:
+
+  🙂🙂🙂🙂🙂
+
+  ZWJ sequence is a single grapheme:
+
+  👨‍💻 working person
+
+  Flags and families:
+
+  🇯🇵 日本 👨‍👩‍👧‍👦 family
+
+  Combining characters:
+
+  é café naïve résumé
