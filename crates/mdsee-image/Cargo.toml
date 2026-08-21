@@ -1,0 +1,11 @@
+[package]
+name = "mdsee-image"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Image pipeline for mdsee (Terminal Graphics Protocols)"
+
+# 画像依存（image / resvg / usvg）は Sprint 4〜5（v0.2）で導入する。
+
+[dependencies]

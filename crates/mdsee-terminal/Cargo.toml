@@ -1,0 +1,10 @@
+[package]
+name = "mdsee-terminal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Terminal capability detection for mdsee"
+
+[dependencies]
+crossterm.workspace = true
