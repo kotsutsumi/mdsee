@@ -8,12 +8,12 @@ pub struct LayoutDocument {
 
 /// Layout block（§17）。
 ///
-/// Sprint 2で `Rule` を追加。`Table` / `Image` は
-/// 担当Sprint（S3-3, S4-9）で追加する。
+/// Sprint 3で `Table` を追加。`Image` は担当Sprint（S4-9）で追加する。
 #[derive(Debug, Clone, PartialEq)]
 pub enum LayoutBlock {
     Text(TextBlock),
     Code(CodeLayout),
+    Table(TableLayout),
     Rule(RuleLayout),
 }
 
@@ -45,12 +45,23 @@ pub struct LinkTarget {
 
 /// コード領域（§17, §28）。
 ///
-/// Sprint 1は枠なしの素朴な表示。枠・言語label・highlight付きの
-/// 本格layoutはSprint 3（S3-1, S3-2）で行う。
+/// 枠の描画はrender段階の責務（§5 borders）。`width` は枠の幅として
+/// 使うcontent幅。コード本文は折り返さない（S3-1）。
 #[derive(Debug, Clone, PartialEq)]
 pub struct CodeLayout {
     pub language: Option<String>,
     pub lines: Vec<String>,
+    /// 枠の幅（grapheme表示幅ではなく列数）。
+    pub width: usize,
+}
+
+/// 表領域（§17, §30〜§32）。
+///
+/// `TableLayoutEngine` がalignment調整・cell wrap・罫線まで完了した
+/// 表示済み行を保持する。renderはこの行をそのまま出力する。
+#[derive(Debug, Clone, PartialEq)]
+pub struct TableLayout {
+    pub lines: Vec<LayoutLine>,
 }
 
 /// 水平罫線領域（§17, §11 HorizontalRule）。

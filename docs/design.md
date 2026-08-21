@@ -2042,6 +2042,8 @@ SHA256
 
 手動更新しない。
 
+**現状**: tap repositoryが未作成のため、release.ymlの `bump-homebrew` jobはno-opの雛形であり、**自動更新は未有効**。tap repository作成後にversion / URL / SHA256の自動更新を有効化する。
+
 ### 90. Cargo Install
 
 同時に、
@@ -2052,7 +2054,12 @@ cargo install mdsee
 
 をサポート。
 
+実装上のmanifestは `crates/mdsee-cli/Cargo.toml` に置くが、公開package名は
+`mdsee`、binary名も `mdsee` とする。
+
 crates.io package名も可能なら `mdsee` を確保する。
+
+**リリース条件**: v0.1リリース時は `cargo publish --dry-run` が成功することと、crates.io上の `mdsee` 名の公開確認（未登録であることの再確認とpublish）をリリース条件とする。2026-08時点で `mdsee` はcrates.ioに未登録（取得可能）を確認済み。
 
 ### 91. Binary Size
 
@@ -2087,6 +2094,19 @@ math = ["images"]
 ```
 
 ただしHomebrew buildでは全部入りbinaryを配布。
+
+**配置規則**: Cargoのworkspace root（`[workspace]`のみのCargo.toml）には `[features]` を定義できないため、featureはbinary crateの `mdsee-cli` に定義し、実装を担うcrateのfeatureへforwardingする。現状は `mdsee-cli` の `syntax = ["mdsee-render/syntax"]` のみ。
+
+将来のfeature追加も同じ規則に従う。
+
+```text
+mdsee-cli: syntax        → mdsee-render/syntax
+mdsee-cli: images/sixel/svg → mdsee-image/*（Sprint 4〜5で導入）
+mdsee-cli: reader        → mdsee-reader/reader（Sprint 6で導入）
+mdsee-cli: network/mermaid/math → mdsee-image/*（Sprint 7で導入）
+```
+
+各library crateは自分の担当分のfeatureを自分のCargo.tomlに持ち、mdsee-cliはそれをforwardするだけにとどめる。featureの実体（optional依存の制御）は実装crate側で定義する。
 
 ---
 

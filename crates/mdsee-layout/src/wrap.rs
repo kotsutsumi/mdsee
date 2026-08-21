@@ -265,7 +265,7 @@ fn flush_word(
 }
 
 /// CJK相当の文字。前後でgrapheme breakを許可する（§23）。
-fn is_cjk_breakable(c: char) -> bool {
+pub(crate) fn is_cjk_breakable(c: char) -> bool {
     matches!(c,
         '\u{3000}'..='\u{303F}'   // CJK記号・句読点（全角記号）
         | '\u{3040}'..='\u{309F}' // 平仮名
@@ -442,6 +442,54 @@ mod tests {
             SemanticStyle::Body,
         );
         assert_eq!(line_texts(&lines), ["e\u{301}e\u{301}e\u{301}e\u{301}"]);
+    }
+
+    // ---- §84 日本語・Unicode edge cases（S3-6） ----
+
+    #[test]
+    fn fullwidth_punctuation_counts_as_two_columns() {
+        // §84: 全角記号。「」【】は幅2
+        let lines = wrap_inlines(
+            &text("「引用」と【注記】の全角記号"),
+            10,
+            SemanticStyle::Body,
+        );
+        let widths = line_widths(&lines);
+        assert!(widths.iter().all(|w| *w <= 10));
+        assert!(lines.len() >= 2);
+        assert_eq!(line_texts(&lines).join(""), "「引用」と【注記】の全角記号");
+    }
+
+    #[test]
+    fn fullwidth_punctuation_breaks_like_cjk() {
+        // 全角記号の前後では折り返せる
+        let lines = wrap_inlines(&text("あ「い」う"), 4, SemanticStyle::Body);
+        assert!(lines.len() >= 2);
+        assert_eq!(line_texts(&lines).join(""), "あ「い」う");
+    }
+
+    #[test]
+    fn long_dashes_and_ellipsis_have_width() {
+        // ─（罫線素片）や…も表示幅を持つ
+        let lines = wrap_inlines(&text("終わり…"), 2, SemanticStyle::Body);
+        assert!(line_widths(&lines).iter().all(|w| *w <= 2));
+        assert_eq!(line_texts(&lines).join(""), "終わり…");
+    }
+
+    #[test]
+    fn japanese_english_mixed_wraps_on_either_boundary() {
+        // §84: 半角英数字混在。英単語内では折らず、CJK境界と語境界で折る。
+        // 語間の空白が折り返し位置に来たときは行末で消える（標準的なwrap挙動）
+        let lines = wrap_inlines(
+            &text("Rustで書かれたmarkdown viewerの実装"),
+            10,
+            SemanticStyle::Body,
+        );
+        assert_eq!(
+            line_texts(&lines),
+            ["Rustで書か", "れた", "markdown", "viewerの実", "装"]
+        );
+        assert!(line_widths(&lines).iter().all(|w| *w <= 10));
     }
 
     #[test]
