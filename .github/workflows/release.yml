@@ -4,9 +4,8 @@
 # GitHub Release へ添付する。Homebrew buildでは全部入りbinary
 # （--all-features）を配布する（§92）。
 #
-# Homebrew tap（§88, §89）: tap repository（homebrew-tap）の作成後、
-# 末尾の `bump-homebrew` job で version / URL / SHA256 を自動更新する。
-# tap repository が存在しない間は job を skippable にしてある。
+# Homebrew tap（§88, §89）: `kotsutsumi/homebrew-tap` の Formula を
+# 末尾の `bump-homebrew` job で version / URL / SHA256 とともに自動更新する。
 name: Release
 
 on:
@@ -93,16 +92,89 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release edit "${GITHUB_REF_NAME}" --draft=false
 
-  # §88, §89: Homebrew tapの自動更新。**自動更新は未有効**。
-  # tap repository（homebrew-tap）作成後に version / URL / SHA256 の
-  # 自動更新を実装して有効化する。それまでは何もしない。
+  # §88, §89: Homebrew tapの自動更新。
   bump-homebrew:
-    name: bump homebrew tap (not yet enabled)
+    name: bump homebrew tap
     needs: [build, publish-release]
     runs-on: ubuntu-latest
     if: ${{ github.repository == 'kotsutsumi/mdsee' }}
     steps:
-      - name: No-op until tap repository exists
+      - name: Checkout Homebrew tap
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: kotsutsumi/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update formula
+        working-directory: homebrew-tap
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
         run: |
-          echo "homebrew-tap repository が未作成のため skip する（§88, §89）。"
-          echo "Formula の自動更新は未有効。tap repo 作成後にこの job を置き換える。"
+          set -euo pipefail
+
+          version="${TAG#v}"
+
+          sha_for() {
+            local name="$1"
+            gh release view "$TAG" --repo "$GH_REPO" --json assets \
+              --jq ".assets[] | select(.name == \"$name\") | .digest" \
+              | sed 's/^sha256://'
+          }
+
+          mac_arm_sha="$(sha_for mdsee-aarch64-apple-darwin.tar.gz)"
+          mac_intel_sha="$(sha_for mdsee-x86_64-apple-darwin.tar.gz)"
+          linux_arm_sha="$(sha_for mdsee-aarch64-unknown-linux-gnu.tar.gz)"
+          linux_intel_sha="$(sha_for mdsee-x86_64-unknown-linux-gnu.tar.gz)"
+
+          for sha in "$mac_arm_sha" "$mac_intel_sha" "$linux_arm_sha" "$linux_intel_sha"; do
+            test -n "$sha"
+          done
+
+          cat > Formula/mdsee.rb <<EOF
+          class Mdsee < Formula
+            desc "Markdown viewer for your terminal"
+            homepage "https://github.com/kotsutsumi/mdsee"
+            version "$version"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/kotsutsumi/mdsee/releases/download/v#{version}/mdsee-aarch64-apple-darwin.tar.gz"
+                sha256 "$mac_arm_sha"
+              else
+                url "https://github.com/kotsutsumi/mdsee/releases/download/v#{version}/mdsee-x86_64-apple-darwin.tar.gz"
+                sha256 "$mac_intel_sha"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "https://github.com/kotsutsumi/mdsee/releases/download/v#{version}/mdsee-aarch64-unknown-linux-gnu.tar.gz"
+                sha256 "$linux_arm_sha"
+              else
+                url "https://github.com/kotsutsumi/mdsee/releases/download/v#{version}/mdsee-x86_64-unknown-linux-gnu.tar.gz"
+                sha256 "$linux_intel_sha"
+              end
+            end
+
+            def install
+              bin.install "mdsee"
+            end
+
+            test do
+              assert_match "mdsee #{version}", shell_output("#{bin}/mdsee --version")
+            end
+          end
+          EOF
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/mdsee.rb
+          if git diff --cached --quiet; then
+            echo "Formula is already current."
+          else
+            git commit -m "mdsee ${version}"
+            git push origin HEAD:main
+          fi
