@@ -8,12 +8,13 @@ pub struct LayoutDocument {
 
 /// Layout block（§17）。
 ///
-/// Sprint 1では `Text` / `Code` のみ定義する。`Table` / `Image` / `Rule` は
-/// 担当Sprint（S3-3, S4-9, S2-3）で追加する。
+/// Sprint 2で `Rule` を追加。`Table` / `Image` は
+/// 担当Sprint（S3-3, S4-9）で追加する。
 #[derive(Debug, Clone, PartialEq)]
 pub enum LayoutBlock {
     Text(TextBlock),
     Code(CodeLayout),
+    Rule(RuleLayout),
 }
 
 /// テキスト領域（§18）。
@@ -50,6 +51,12 @@ pub struct LinkTarget {
 pub struct CodeLayout {
     pub language: Option<String>,
     pub lines: Vec<String>,
+}
+
+/// 水平罫線領域（§17, §11 HorizontalRule）。
+#[derive(Debug, Clone, PartialEq)]
+pub struct RuleLayout {
+    pub width: usize,
 }
 
 /// 意味スタイル（§19）。色は持たず、Theme側で実際の色へ変換する。
