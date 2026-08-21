@@ -2,6 +2,7 @@
 //!
 //! Layout TreeからANSI / plain textを生成する。
 
+mod highlight;
 mod style;
 mod theme;
 
@@ -12,6 +13,9 @@ use thiserror::Error;
 use mdsee_layout::{LayoutBlock, LayoutDocument, LayoutLine, LayoutSpan, SemanticStyle};
 use mdsee_terminal::ColorLevel;
 
+#[cfg(feature = "syntax")]
+pub use highlight::syntect_backend::SyntectHighlighter;
+pub use highlight::{HighlightedLine, HighlightedSpan, NoHighlight, SyntaxHighlighter};
 pub use theme::{select_auto_theme, AlertTheme, TextStyle, Theme};
 
 /// ANSI reset sequence。
@@ -68,12 +72,13 @@ pub fn render(
                     write_text_line(&mut output, line, options);
                 }
             }
-            LayoutBlock::Code(code) => {
-                for line in &code.lines {
-                    write_code_line(&mut output, line, options);
+            LayoutBlock::Code(code) => write_code_block(&mut output, code, options),
+            LayoutBlock::Rule(rule) => write_rule_line(&mut output, rule.width, options),
+            LayoutBlock::Table(table) => {
+                for line in &table.lines {
+                    write_text_line(&mut output, line, options);
                 }
             }
-            LayoutBlock::Rule(rule) => write_rule_line(&mut output, rule.width, options),
         }
     }
     target.write_all(output.as_bytes())?;
@@ -177,22 +182,164 @@ fn write_rule_line(output: &mut String, width: usize, options: &RenderOptions) {
     output.push('\n');
 }
 
-fn write_code_line(output: &mut String, line: &str, options: &RenderOptions) {
+/// コードblock（§28）。`╭─ 言語 ─` 枠で囲み、中身はhighlightして出す。
+///
+/// 本文は折り返さない（S3-1）。色が無効な場合はhighlightも行わない。
+fn write_code_block(output: &mut String, code: &mdsee_layout::CodeLayout, options: &RenderOptions) {
+    use unicode_width::UnicodeWidthStr;
+
+    // 上枠: ╭─ rust ─────（言語がなければ ╭────）
     push_margin(output, options.margin);
     match options.color_level {
-        ColorLevel::None => output.push_str(line),
+        ColorLevel::None => match &code.language {
+            Some(language) => {
+                let prefix = format!("╭─ {language} ");
+                let fill = code.width.saturating_sub(prefix.width() + 1);
+                output.push_str(&prefix);
+                output.push_str(&"─".repeat(fill));
+                output.push('─');
+            }
+            None => {
+                output.push('╭');
+                output.push_str(&"─".repeat(code.width.saturating_sub(1)));
+            }
+        },
         level => {
-            let sequence = style::sgr_sequence(&options.theme.spec(SemanticStyle::Code), level);
-            if sequence.is_empty() {
-                output.push_str(line);
-            } else {
-                output.push_str(&sequence);
-                output.push_str(line);
-                output.push_str(RESET);
+            let border = style::sgr_sequence(&options.theme.spec(SemanticStyle::Border), level);
+            output.push_str(&border);
+            match &code.language {
+                Some(language) => {
+                    let label_width = UnicodeWidthStr::width(language.as_str());
+                    // "╭─ " + label + " " + "─" * (width - 3 - label - 1)
+                    let fill = code.width.saturating_sub(3 + label_width + 1).max(1);
+                    output.push_str("╭─ ");
+                    output.push_str(RESET);
+                    let label =
+                        style::sgr_sequence(&options.theme.spec(SemanticStyle::Muted), level);
+                    output.push_str(&label);
+                    output.push_str(language);
+                    output.push_str(RESET);
+                    output.push_str(&border);
+                    output.push(' ');
+                    output.push_str(&"─".repeat(fill));
+                    output.push_str(RESET);
+                }
+                None => {
+                    output.push('╭');
+                    output.push_str(&"─".repeat(code.width.saturating_sub(1)));
+                    output.push_str(RESET);
+                }
             }
         }
     }
     output.push('\n');
+
+    // 本文行: │ + highlight済みspan
+    let highlighted = highlight_code(code, options);
+    for (index, line) in code.lines.iter().enumerate() {
+        push_margin(output, options.margin);
+        match options.color_level {
+            ColorLevel::None => {
+                if line.is_empty() {
+                    output.push('│');
+                } else {
+                    output.push_str("│ ");
+                    output.push_str(line);
+                }
+            }
+            level => {
+                let border = style::sgr_sequence(&options.theme.spec(SemanticStyle::Border), level);
+                output.push_str(&border);
+                output.push('│');
+                output.push_str(RESET);
+                if line.is_empty() {
+                    output.push('\n');
+                    continue;
+                }
+                output.push(' ');
+                match highlighted.as_ref().and_then(|lines| lines.get(index)) {
+                    Some(hl) if !hl.spans.is_empty() => {
+                        for span in &hl.spans {
+                            let sequence = style::sgr_sequence(
+                                &style::StyleSpec {
+                                    fg: Some(span.fg),
+                                    bold: span.bold,
+                                    italic: span.italic,
+                                    underline: span.underline,
+                                    strike: false,
+                                },
+                                level,
+                            );
+                            if sequence.is_empty() {
+                                output.push_str(&span.text);
+                            } else {
+                                output.push_str(&sequence);
+                                output.push_str(&span.text);
+                                output.push_str(RESET);
+                            }
+                        }
+                    }
+                    _ => {
+                        let sequence =
+                            style::sgr_sequence(&options.theme.spec(SemanticStyle::Code), level);
+                        if sequence.is_empty() {
+                            output.push_str(line);
+                        } else {
+                            output.push_str(&sequence);
+                            output.push_str(line);
+                            output.push_str(RESET);
+                        }
+                    }
+                }
+            }
+        }
+        output.push('\n');
+    }
+
+    // 下枠: ╰────
+    push_margin(output, options.margin);
+    match options.color_level {
+        ColorLevel::None => {
+            output.push('╰');
+            output.push_str(&"─".repeat(code.width.saturating_sub(1)));
+        }
+        level => {
+            let border = style::sgr_sequence(&options.theme.spec(SemanticStyle::Border), level);
+            output.push_str(&border);
+            output.push('╰');
+            output.push_str(&"─".repeat(code.width.saturating_sub(1)));
+            output.push_str(RESET);
+        }
+    }
+    output.push('\n');
+}
+
+/// code blockのhighlight。色無効またはfeature構成によりhighlightできない
+/// 場合は `None`（§29: rendererはtrait越しにのみ使う）。
+fn highlight_code(
+    code: &mdsee_layout::CodeLayout,
+    options: &RenderOptions,
+) -> Option<Vec<HighlightedLine>> {
+    if options.color_level == ColorLevel::None {
+        return None;
+    }
+    #[cfg(feature = "syntax")]
+    {
+        let highlighter: &dyn SyntaxHighlighter =
+            &SyntectHighlighter::new(options.theme.syntax_theme.clone());
+        let mut source = code.lines.join("\n");
+        if !source.is_empty() {
+            source.push('\n');
+        }
+        let lines = highlighter.highlight(&source, code.language.as_deref());
+        Some(lines)
+    }
+    #[cfg(not(feature = "syntax"))]
+    {
+        let highlighter: &dyn SyntaxHighlighter = &NoHighlight;
+        let lines = highlighter.highlight(&code.lines.join("\n"), code.language.as_deref());
+        Some(lines)
+    }
 }
 
 fn push_margin(output: &mut String, margin: u16) {
@@ -291,11 +438,12 @@ mod tests {
     }
 
     #[test]
-    fn code_lines_are_rendered_with_code_style() {
+    fn code_block_renders_frame_and_highlighted_lines() {
         let document = LayoutDocument {
             blocks: vec![LayoutBlock::Code(mdsee_layout::CodeLayout {
                 language: Some("rust".to_string()),
                 lines: vec!["fn main() {}".to_string()],
+                width: 20,
             })],
         };
         let options = RenderOptions {
@@ -305,14 +453,71 @@ mod tests {
             theme: Theme::dark(),
         };
         let output = render_to(&document, &options);
-        // theme では Code style を quote 相当の色へマップしている
+        let lines: Vec<&str> = output.lines().collect();
+        assert_eq!(lines.len(), 3);
+        // 上枠は ╭─ rust ─…。言語label付き
+        assert!(lines[0].starts_with("\x1b[38;5;"));
+        assert!(lines[0].contains('╭'));
+        assert!(lines[0].contains("rust"));
+        // 本文行は │ prefixを持ち、highlight色（syntect由来）で分割される。
+        // escapeを除去すると元のコード行に戻る
+        let stripped = strip_sgr(lines[1]);
+        assert_eq!(stripped, "│ fn main() {}");
+        // 下枠
+        assert!(lines[2].contains('╰'));
         assert_eq!(
-            output,
+            lines[2],
             format!(
-                "\x1b[38;5;{}mfn main() {{}}\x1b[0m\n",
-                style::rgb_to_256(style::Rgb(139, 148, 158))
+                "\x1b[38;5;{}m╰{}─\x1b[0m",
+                style::rgb_to_256(style::Rgb(48, 54, 61)),
+                "─".repeat(18)
             )
         );
+    }
+
+    /// SGR sequence（\x1b[...m）を除去する。test専用の簡易版。
+    fn strip_sgr(input: &str) -> String {
+        let mut out = String::new();
+        let mut chars = input.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '\x1b' && chars.peek() == Some(&'[') {
+                for c in chars.by_ref() {
+                    if c == 'm' {
+                        break;
+                    }
+                }
+            } else {
+                out.push(c);
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn plain_code_block_renders_frame_without_ansi() {
+        let document = LayoutDocument {
+            blocks: vec![LayoutBlock::Code(mdsee_layout::CodeLayout {
+                language: Some("sh".to_string()),
+                lines: vec!["ls -la".to_string(), String::new()],
+                width: 12,
+            })],
+        };
+        let output = render_to(&document, &RenderOptions::default());
+        assert_eq!(output, "  ╭─ sh ──────\n  │ ls -la\n  │\n  ╰───────────\n");
+        assert!(!output.contains('\x1b'));
+    }
+
+    #[test]
+    fn no_language_code_block_has_plain_frame() {
+        let document = LayoutDocument {
+            blocks: vec![LayoutBlock::Code(mdsee_layout::CodeLayout {
+                language: None,
+                lines: vec!["x".to_string()],
+                width: 6,
+            })],
+        };
+        let output = render_to(&document, &RenderOptions::default());
+        assert_eq!(output, "  ╭─────\n  │ x\n  ╰─────\n");
     }
 
     // ---- Sprint 2（S2-4, S2-3） ----

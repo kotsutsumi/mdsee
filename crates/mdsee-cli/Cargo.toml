@@ -10,6 +10,13 @@ description = "Markdown viewer for your terminal"
 name = "mdsee"
 path = "src/main.rs"
 
+# §92: feature flags。画像系（images/sixel/svg/mermaid/math）と
+# reader/network は担当Sprintで有効化する。Homebrew buildでは
+# 全部入り（--all-features）で配布する。
+[features]
+default = ["syntax"]
+syntax = ["mdsee-render/syntax"]
+
 [dependencies]
 mdsee-core.workspace = true
 mdsee-layout.workspace = true

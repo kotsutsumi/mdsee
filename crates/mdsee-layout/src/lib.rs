@@ -5,12 +5,14 @@
 
 mod block;
 mod model;
+mod table;
 mod wrap;
 
 pub use model::{
     CodeLayout, LayoutBlock, LayoutDocument, LayoutLine, LayoutSpan, LinkTarget, RuleLayout,
-    SemanticStyle, TextBlock,
+    SemanticStyle, TableLayout, TextBlock,
 };
+pub use table::TableLayoutEngine;
 
 use thiserror::Error;
 

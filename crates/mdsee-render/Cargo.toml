@@ -6,8 +6,15 @@ license.workspace = true
 repository.workspace = true
 description = "ANSI / plain renderer for mdsee"
 
+[features]
+default = ["syntax"]
+# §92: syntax highlight。renderer本体はtrait越しにのみ使う（§29）
+syntax = ["dep:syntect"]
+
 [dependencies]
 mdsee-core.workspace = true
 mdsee-layout.workspace = true
 mdsee-terminal.workspace = true
 thiserror.workspace = true
+unicode-width.workspace = true
+syntect = { workspace = true, optional = true }
