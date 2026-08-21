@@ -1,0 +1,13 @@
+[package]
+name = "mdsee-layout"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Document layout engine for mdsee"
+
+[dependencies]
+mdsee-core.workspace = true
+unicode-width.workspace = true
+unicode-segmentation.workspace = true
+thiserror.workspace = true

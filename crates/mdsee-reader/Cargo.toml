@@ -1,0 +1,11 @@
+[package]
+name = "mdsee-reader"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Interactive reader (pager) for mdsee"
+
+# TUI 依存（ratatui / crossterm）は Sprint 6（v0.3）で導入する。
+
+[dependencies]
