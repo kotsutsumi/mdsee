@@ -1,16 +1,14 @@
-//! SemanticStyle → ANSI変換と色の降格（design.md §19, §35）。
+//! SGR sequence組み立てと色の降格（design.md §19, §35）。
 //!
-//! Sprint 1では組込みdefault palette（dark前提）のみを使用する。
-//! `Theme` 構造への一般化はSprint 2（S2-9）で行う。
+//! 実際の色は `Theme`（§61）が持つ。ここではANSIへの変換のみを担当する。
 
-use mdsee_layout::SemanticStyle;
 use mdsee_terminal::ColorLevel;
 
 /// RGB色。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Rgb(pub u8, pub u8, pub u8);
+pub struct Rgb(pub u8, pub u8, pub u8);
 
-/// styleの表示属性。色は持たず、この表からANSIへ落とす（§19）。
+/// 表示属性。§61の `TextStyle` と同型。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct StyleSpec {
     pub fg: Option<Rgb>,
@@ -18,84 +16,6 @@ pub(crate) struct StyleSpec {
     pub italic: bool,
     pub strike: bool,
     pub underline: bool,
-}
-
-impl StyleSpec {
-    const DEFAULT: Self = Self {
-        fg: None,
-        bold: false,
-        italic: false,
-        strike: false,
-        underline: false,
-    };
-
-    const fn fg(fg: Rgb) -> Self {
-        Self {
-            fg: Some(fg),
-            ..Self::DEFAULT
-        }
-    }
-}
-
-/// 組込みdefault palette（S1-11。Themeへの一般化はS2-9）。
-pub(crate) fn style_spec(style: SemanticStyle) -> StyleSpec {
-    match style {
-        SemanticStyle::Body => StyleSpec::DEFAULT,
-        SemanticStyle::Muted => StyleSpec::fg(Rgb(139, 148, 158)),
-
-        SemanticStyle::Heading1 => StyleSpec {
-            fg: Some(Rgb(63, 185, 80)),
-            bold: true,
-            ..StyleSpec::DEFAULT
-        },
-        SemanticStyle::Heading2 => StyleSpec {
-            fg: Some(Rgb(88, 166, 255)),
-            bold: true,
-            ..StyleSpec::DEFAULT
-        },
-        SemanticStyle::Heading3 => StyleSpec {
-            fg: Some(Rgb(233, 208, 115)),
-            bold: true,
-            ..StyleSpec::DEFAULT
-        },
-        SemanticStyle::Heading4 => StyleSpec {
-            bold: true,
-            ..StyleSpec::DEFAULT
-        },
-        SemanticStyle::Heading5 | SemanticStyle::Heading6 => StyleSpec {
-            bold: true,
-            ..StyleSpec::DEFAULT
-        },
-
-        SemanticStyle::Strong => StyleSpec {
-            bold: true,
-            ..StyleSpec::DEFAULT
-        },
-        SemanticStyle::Emphasis => StyleSpec {
-            italic: true,
-            ..StyleSpec::DEFAULT
-        },
-        SemanticStyle::Strike => StyleSpec {
-            strike: true,
-            ..StyleSpec::DEFAULT
-        },
-
-        SemanticStyle::InlineCode => StyleSpec::fg(Rgb(79, 193, 233)),
-        SemanticStyle::Link => StyleSpec {
-            fg: Some(Rgb(88, 166, 255)),
-            underline: true,
-            ..StyleSpec::DEFAULT
-        },
-        SemanticStyle::Quote => StyleSpec::fg(Rgb(139, 148, 158)),
-        SemanticStyle::Code => StyleSpec::fg(Rgb(166, 173, 186)),
-        SemanticStyle::Border => StyleSpec::fg(Rgb(48, 54, 61)),
-
-        SemanticStyle::AlertNote => StyleSpec::fg(Rgb(88, 166, 255)),
-        SemanticStyle::AlertTip => StyleSpec::fg(Rgb(63, 185, 80)),
-        SemanticStyle::AlertImportant => StyleSpec::fg(Rgb(163, 113, 247)),
-        SemanticStyle::AlertWarning => StyleSpec::fg(Rgb(219, 171, 121)),
-        SemanticStyle::AlertCaution => StyleSpec::fg(Rgb(248, 81, 73)),
-    }
 }
 
 /// SGR（Select Graphic Rendition）開始sequenceを組み立てる。
@@ -240,21 +160,39 @@ mod tests {
 
     #[test]
     fn truecolor_uses_38_2() {
-        let spec = StyleSpec::fg(Rgb(10, 20, 30));
+        let spec = StyleSpec {
+            fg: Some(Rgb(10, 20, 30)),
+            bold: false,
+            italic: false,
+            strike: false,
+            underline: false,
+        };
         let seq = sgr_sequence(&spec, ColorLevel::TrueColor);
         assert_eq!(seq, "\x1b[38;2;10;20;30m");
     }
 
     #[test]
     fn ansi256_uses_38_5() {
-        let spec = StyleSpec::fg(Rgb(255, 0, 0));
+        let spec = StyleSpec {
+            fg: Some(Rgb(255, 0, 0)),
+            bold: false,
+            italic: false,
+            strike: false,
+            underline: false,
+        };
         let seq = sgr_sequence(&spec, ColorLevel::Ansi256);
         assert_eq!(seq, "\x1b[38;5;196m");
     }
 
     #[test]
     fn ansi16_uses_basic_code() {
-        let spec = StyleSpec::fg(Rgb(255, 0, 0));
+        let spec = StyleSpec {
+            fg: Some(Rgb(255, 0, 0)),
+            bold: false,
+            italic: false,
+            strike: false,
+            underline: false,
+        };
         let seq = sgr_sequence(&spec, ColorLevel::Ansi16);
         assert_eq!(seq, "\x1b[31m");
     }
@@ -277,7 +215,9 @@ mod tests {
         let spec = StyleSpec {
             fg: Some(Rgb(1, 2, 3)),
             bold: true,
-            ..StyleSpec::DEFAULT
+            italic: false,
+            strike: false,
+            underline: false,
         };
         assert_eq!(sgr_sequence(&spec, ColorLevel::None), "");
     }

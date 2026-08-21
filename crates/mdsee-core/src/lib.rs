@@ -8,8 +8,8 @@ mod input;
 mod parser;
 
 pub use ast::{
-    Block, BlockId, CodeBlock, Document, DocumentMetadata, Heading, Inline, Link, Paragraph,
-    SourceSpan, TextRun,
+    Block, BlockId, BlockQuote, CodeBlock, Document, DocumentMetadata, Heading, Inline, Link, List,
+    ListItem, Paragraph, SourceSpan, TextRun,
 };
 pub use error::{LoadError, ParseError};
 pub use input::{load_source, InputSource, Origin, SourceDocument};

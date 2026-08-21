@@ -8,8 +8,8 @@ mod model;
 mod wrap;
 
 pub use model::{
-    CodeLayout, LayoutBlock, LayoutDocument, LayoutLine, LayoutSpan, LinkTarget, SemanticStyle,
-    TextBlock,
+    CodeLayout, LayoutBlock, LayoutDocument, LayoutLine, LayoutSpan, LinkTarget, RuleLayout,
+    SemanticStyle, TextBlock,
 };
 
 use thiserror::Error;

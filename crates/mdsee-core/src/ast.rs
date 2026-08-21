@@ -51,14 +51,17 @@ pub struct Document {
 
 /// Block種別（§11）。
 ///
-/// Sprint 1では変換対象のBlockのみ定義する。`BlockQuote` / `List` /
-/// `Table` / `HorizontalRule` / `Alert` / `Image` / `Math` は
-/// それぞれ担当Sprint（S2-1〜S2-3, S3-3, S3-4, S4-3, S7-4）で追加する。
+/// Sprint 2で `List` / `BlockQuote` / `HorizontalRule` を追加。
+/// `Table` / `Image` / `Alert` / `Math` は
+/// 担当Sprint（S3-3, S3-4, S4-3, S7-4）で追加する。
 #[derive(Debug, Clone, PartialEq)]
 pub enum Block {
     Heading(Heading),
     Paragraph(Paragraph),
     CodeBlock(CodeBlock),
+    BlockQuote(BlockQuote),
+    List(List),
+    HorizontalRule,
 }
 
 /// 見出し。
@@ -84,6 +87,38 @@ pub struct Paragraph {
 pub struct CodeBlock {
     pub language: Option<String>,
     pub source: String,
+    pub span: SourceSpan,
+    pub id: BlockId,
+}
+
+/// 引用ブロック（§26）。
+#[derive(Debug, Clone, PartialEq)]
+pub struct BlockQuote {
+    pub children: Vec<Block>,
+    pub span: SourceSpan,
+    pub id: BlockId,
+}
+
+/// リスト（§25）。
+#[derive(Debug, Clone, PartialEq)]
+pub struct List {
+    /// `true` = ordered list。`false` = bullet list。
+    pub ordered: bool,
+    /// ordered listの開始番号（§25の `1. foo`）。bullet listでは無視する。
+    pub start: u64,
+    /// tight list（項目間・項目内に空行を挟まない）。§25の表示参照。
+    pub tight: bool,
+    pub items: Vec<ListItem>,
+    pub span: SourceSpan,
+    pub id: BlockId,
+}
+
+/// リスト項目（§25）。
+#[derive(Debug, Clone, PartialEq)]
+pub struct ListItem {
+    /// task listのチェック状態（§25）。task listでない場合は `None`。
+    pub task: Option<bool>,
+    pub children: Vec<Block>,
     pub span: SourceSpan,
     pub id: BlockId,
 }
