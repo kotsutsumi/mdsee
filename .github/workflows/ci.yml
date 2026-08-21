@@ -1,5 +1,5 @@
-# CI（design.md §85 の最小構成。Sprint 1 は Ubuntu のみ、
-# 3 OS matrix への拡張は Sprint 3（S3-8）で行う）
+# CI（design.md §85）。Ubuntu / macOS / Windows の3 OS matrix。
+# Sprint 3（S3-8）で S1-1 の最小workflowから拡張した。
 name: CI
 
 on:
@@ -7,9 +7,17 @@ on:
     branches: [main, develop]
   pull_request:
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   check:
-    runs-on: ubuntu-latest
+    name: check (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -22,3 +30,5 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Test
         run: cargo test --workspace
+      - name: Build release
+        run: cargo build --release

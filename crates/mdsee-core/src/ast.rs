@@ -51,9 +51,8 @@ pub struct Document {
 
 /// Block種別（§11）。
 ///
-/// Sprint 2で `List` / `BlockQuote` / `HorizontalRule` を追加。
-/// `Table` / `Image` / `Alert` / `Math` は
-/// 担当Sprint（S3-3, S3-4, S4-3, S7-4）で追加する。
+/// Sprint 3で `Table` / `Alert` を追加。
+/// `Image` / `Math` は担当Sprint（S4-3, S7-4）で追加する。
 #[derive(Debug, Clone, PartialEq)]
 pub enum Block {
     Heading(Heading),
@@ -61,7 +60,9 @@ pub enum Block {
     CodeBlock(CodeBlock),
     BlockQuote(BlockQuote),
     List(List),
+    Table(Table),
     HorizontalRule,
+    Alert(Alert),
 }
 
 /// 見出し。
@@ -121,6 +122,69 @@ pub struct ListItem {
     pub children: Vec<Block>,
     pub span: SourceSpan,
     pub id: BlockId,
+}
+
+/// 表（§30〜§32）。
+#[derive(Debug, Clone, PartialEq)]
+pub struct Table {
+    /// 各columnのalignment。行方向の長さはcolumn数と一致する。
+    pub alignments: Vec<Alignment>,
+    /// 先頭行（GFM delimiterより前の行）。
+    pub header: Vec<TableCell>,
+    /// 本文行。
+    pub rows: Vec<Vec<TableCell>>,
+    pub span: SourceSpan,
+    pub id: BlockId,
+}
+
+/// 表のセル（§30）。
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct TableCell {
+    pub inlines: Vec<Inline>,
+}
+
+/// GFMのcolumn alignment（§32）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Alignment {
+    #[default]
+    None,
+    Left,
+    Center,
+    Right,
+}
+
+/// GFM Alert（§27）。
+#[derive(Debug, Clone, PartialEq)]
+pub struct Alert {
+    pub kind: AlertKind,
+    /// `> [!NOTE] タイトル` 形式の上書きタイトル。通常は `None`。
+    pub title: Option<String>,
+    pub children: Vec<Block>,
+    pub span: SourceSpan,
+    pub id: BlockId,
+}
+
+/// Alert種別（§27）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AlertKind {
+    Note,
+    Tip,
+    Important,
+    Warning,
+    Caution,
+}
+
+impl AlertKind {
+    /// 枠に表示する既定タイトル（§27）。
+    pub fn default_title(self) -> &'static str {
+        match self {
+            Self::Note => "NOTE",
+            Self::Tip => "TIP",
+            Self::Important => "IMPORTANT",
+            Self::Warning => "WARNING",
+            Self::Caution => "CAUTION",
+        }
+    }
 }
 
 /// Inline要素（§12）。

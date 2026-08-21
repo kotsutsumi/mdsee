@@ -2,12 +2,14 @@
 //!
 //! Comrak ASTを再帰的にInternal ASTへ変換する。
 
-use comrak::nodes::{AstNode, ListType, NodeValue, Sourcepos};
+use comrak::nodes::{
+    AlertType, AstNode, ListType, NodeValue, Sourcepos, TableAlignment as ComrakAlignment,
+};
 use comrak::{parse_document, Arena, Options};
 
 use crate::ast::{
-    Block, BlockId, BlockQuote, CodeBlock, Document, DocumentMetadata, Heading, Inline, Link, List,
-    ListItem, Paragraph, SourceSpan, TextRun,
+    Alert, AlertKind, Alignment, Block, BlockId, BlockQuote, CodeBlock, Document, DocumentMetadata,
+    Heading, Inline, Link, List, ListItem, Paragraph, SourceSpan, Table, TableCell, TextRun,
 };
 use crate::error::ParseError;
 use crate::input::SourceDocument;
@@ -49,12 +51,14 @@ pub fn parse(source: &SourceDocument) -> Result<Document, ParseError> {
 
 /// comrak拡張の有効化。
 ///
-/// tasklistは§25のtask list対応。strikethroughはSprint 1で有効化済み。
-/// table / alerts等は担当Sprintで有効化する。
+/// tasklist（§25）・table（§30〜§32）・alerts（§27）・strikethroughを有効化。
+/// 画像等は担当Sprintで追加する。
 fn parser_options() -> Options<'static> {
     let mut options = Options::default();
     options.extension.strikethrough = true;
     options.extension.tasklist = true;
+    options.extension.table = true;
+    options.extension.alerts = true;
     options
 }
 
@@ -125,6 +129,21 @@ fn convert_block<'a>(node: &'a AstNode<'a>, ids: &mut IdGenerator) -> Vec<Block>
             })]
         }
         NodeValue::ThematicBreak => vec![Block::HorizontalRule],
+        NodeValue::Table(_) => {
+            let id = ids.issue();
+            vec![Block::Table(convert_table(node, id, span))]
+        }
+        NodeValue::Alert(alert) => {
+            let id = ids.issue();
+            let children = convert_children(node, ids);
+            vec![Block::Alert(Alert {
+                kind: convert_alert_kind(alert.alert_type),
+                title: alert.title.clone(),
+                children,
+                span,
+                id,
+            })]
+        }
         NodeValue::HtmlBlock(html) => {
             // §15: block HTMLはtagを除去してtext fallbackする。
             let text = strip_html_tags(&html.literal);
@@ -144,6 +163,61 @@ fn convert_block<'a>(node: &'a AstNode<'a>, ids: &mut IdGenerator) -> Vec<Block>
         // Sprint 2/3で対応するblock（list / blockquote / thematic break / table /
         // alert等）は、対応までの間は子を透過的に走査してparagraph等を拾う。
         _ => convert_children(node, ids),
+    }
+}
+
+/// Table node（`Table` > `TableRow(is_header)` > `TableCell`）を変換する（§30）。
+fn convert_table<'a>(node: &'a AstNode<'a>, id: BlockId, span: SourceSpan) -> Table {
+    let alignments: Vec<Alignment> = match &node.data.borrow().value {
+        NodeValue::Table(table) => table.alignments.iter().map(convert_alignment).collect(),
+        _ => Vec::new(),
+    };
+
+    let mut header: Vec<TableCell> = Vec::new();
+    let mut rows: Vec<Vec<TableCell>> = Vec::new();
+    for row in node.children() {
+        let is_header = match &row.data.borrow().value {
+            NodeValue::TableRow(is_header) => *is_header,
+            _ => false,
+        };
+        let cells = row
+            .children()
+            .map(|cell| TableCell {
+                inlines: convert_inlines(cell),
+            })
+            .collect();
+        if is_header {
+            header = cells;
+        } else {
+            rows.push(cells);
+        }
+    }
+
+    Table {
+        alignments,
+        header,
+        rows,
+        span,
+        id,
+    }
+}
+
+fn convert_alignment(alignment: &ComrakAlignment) -> Alignment {
+    match alignment {
+        ComrakAlignment::None => Alignment::None,
+        ComrakAlignment::Left => Alignment::Left,
+        ComrakAlignment::Center => Alignment::Center,
+        ComrakAlignment::Right => Alignment::Right,
+    }
+}
+
+fn convert_alert_kind(kind: AlertType) -> AlertKind {
+    match kind {
+        AlertType::Note => AlertKind::Note,
+        AlertType::Tip => AlertKind::Tip,
+        AlertType::Important => AlertKind::Important,
+        AlertType::Warning => AlertKind::Warning,
+        AlertType::Caution => AlertKind::Caution,
     }
 }
 
@@ -386,6 +460,8 @@ mod tests {
                 Block::CodeBlock(c) => c.id,
                 Block::BlockQuote(q) => q.id,
                 Block::List(l) => l.id,
+                Block::Table(t) => t.id,
+                Block::Alert(a) => a.id,
                 Block::HorizontalRule => panic!("unexpected rule"),
             })
             .collect();
@@ -504,5 +580,76 @@ mod tests {
         let doc = parse_md("above\n\n---\n\nbelow\n");
         assert_eq!(doc.blocks.len(), 3);
         assert_eq!(doc.blocks[1], Block::HorizontalRule);
+    }
+
+    // ---- Sprint 3（S3-3, S3-4） ----
+
+    #[test]
+    fn parses_table_with_alignments() {
+        let doc = parse_md("| Left | Center | Right |\n| :--- | :----: | ----: |\n| a | b | c |\n");
+        assert_eq!(doc.blocks.len(), 1);
+        let Block::Table(table) = &doc.blocks[0] else {
+            panic!("expected table");
+        };
+        assert_eq!(
+            table.alignments,
+            vec![Alignment::Left, Alignment::Center, Alignment::Right]
+        );
+        assert_eq!(table.header.len(), 3);
+        assert_eq!(table.rows.len(), 1);
+        let cell_text = |cell: &TableCell| plain_text(&cell.inlines);
+        assert_eq!(
+            table.header.iter().map(&cell_text).collect::<Vec<_>>(),
+            ["Left", "Center", "Right"]
+        );
+        assert_eq!(
+            table.rows[0].iter().map(&cell_text).collect::<Vec<_>>(),
+            ["a", "b", "c"]
+        );
+    }
+
+    #[test]
+    fn parses_table_without_alignment_markers() {
+        let doc = parse_md("| a | b |\n| --- | --- |\n| 1 | 2 |\n");
+        let Block::Table(table) = &doc.blocks[0] else {
+            panic!("expected table");
+        };
+        assert_eq!(table.alignments, vec![Alignment::None, Alignment::None]);
+        assert_eq!(table.rows.len(), 1);
+    }
+
+    #[test]
+    fn parses_all_alert_kinds() {
+        for (markdown, kind) in [
+            ("> [!NOTE]\n> text\n", AlertKind::Note),
+            ("> [!TIP]\n> text\n", AlertKind::Tip),
+            ("> [!IMPORTANT]\n> text\n", AlertKind::Important),
+            ("> [!WARNING]\n> text\n", AlertKind::Warning),
+            ("> [!CAUTION]\n> text\n", AlertKind::Caution),
+        ] {
+            let doc = parse_md(markdown);
+            let Block::Alert(alert) = &doc.blocks[0] else {
+                panic!("expected alert for {markdown}");
+            };
+            assert_eq!(alert.kind, kind);
+            assert_eq!(alert.title, None);
+            assert_eq!(alert.children.len(), 1);
+        }
+    }
+
+    #[test]
+    fn alert_with_bold_marker_is_recognized() {
+        // GitHub互換の **bold** marker付きalert
+        let doc = parse_md("> [!WARNING] **危険**\n> body\n");
+        let Block::Alert(alert) = &doc.blocks[0] else {
+            panic!("expected alert");
+        };
+        assert_eq!(alert.kind, AlertKind::Warning);
+    }
+
+    #[test]
+    fn plain_blockquote_is_not_alert() {
+        let doc = parse_md("> just a quote\n");
+        assert!(matches!(&doc.blocks[0], Block::BlockQuote(_)));
     }
 }

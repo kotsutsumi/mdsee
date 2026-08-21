@@ -1,11 +1,12 @@
 //! AST block → LayoutBlock 変換（design.md §21〜§26, §28）。
 
-use mdsee_core::{Block, BlockQuote, CodeBlock, Heading, List, Paragraph};
+use mdsee_core::{Alert, AlertKind, Block, BlockQuote, CodeBlock, Heading, List, Paragraph};
 use unicode_width::UnicodeWidthStr;
 
 use crate::model::{
     CodeLayout, LayoutBlock, LayoutLine, LayoutSpan, RuleLayout, SemanticStyle, TextBlock,
 };
+use crate::table::layout_table;
 use crate::wrap::wrap_inlines;
 use crate::LayoutContext;
 
@@ -19,10 +20,12 @@ fn layout_block_at(block: &Block, ctx: &LayoutContext, indent: usize) -> LayoutB
     match block {
         Block::Heading(heading) => LayoutBlock::Text(layout_heading(heading, width)),
         Block::Paragraph(paragraph) => LayoutBlock::Text(layout_paragraph(paragraph, width)),
-        Block::CodeBlock(code) => LayoutBlock::Code(layout_code_block(code)),
+        Block::CodeBlock(code) => LayoutBlock::Code(layout_code_block(code, width)),
         Block::BlockQuote(quote) => LayoutBlock::Text(layout_blockquote(quote, ctx, indent)),
         Block::List(list) => LayoutBlock::Text(layout_list(list, ctx, indent)),
+        Block::Table(table) => layout_table(table, width),
         Block::HorizontalRule => LayoutBlock::Rule(RuleLayout { width }),
+        Block::Alert(alert) => LayoutBlock::Text(layout_alert(alert, ctx, indent)),
     }
 }
 
@@ -76,11 +79,104 @@ fn rule_line(ch: char, width: usize) -> LayoutLine {
 
 /// コードblock（§28）。
 ///
-/// Sprint 1は枠なしの素朴な表示。`╭─` 枠はSprint 3（S3-1）で導入する。
-fn layout_code_block(code: &CodeBlock) -> CodeLayout {
+/// 本文は折り返さない（S3-1）。`╭─ 言語 ─` 枠の描画はrenderが行う。
+fn layout_code_block(code: &CodeBlock, width: usize) -> CodeLayout {
     CodeLayout {
         language: code.language.clone(),
         lines: code.source.lines().map(str::to_string).collect(),
+        width,
+    }
+}
+
+/// GFM Alert（§27）。
+///
+/// ```text
+/// ╭─ WARNING ─────────────────
+/// │ Dangerous
+/// ╰───────────────────────────
+/// ```
+/// 枠線はBorder style、TITLEはAlert系style、本文はBody。
+fn layout_alert(alert: &Alert, ctx: &LayoutContext, indent: usize) -> TextBlock {
+    let width = available_width(ctx, indent);
+    let alert_style = alert_style_of(alert.kind);
+    let title = alert
+        .title
+        .clone()
+        .unwrap_or_else(|| alert.kind.default_title().to_string());
+
+    let mut lines = Vec::new();
+
+    // 上枠: ╭─ TITLE ─────（§27: 枠行に│ prefixは付けない）
+    let prefix_width = UnicodeWidthStr::width(format!("╭─ {title} ").as_str());
+    let fill = width.saturating_sub(prefix_width + 1);
+    lines.push(LayoutLine {
+        spans: vec![
+            LayoutSpan {
+                content: "╭─ ".to_string(),
+                style: SemanticStyle::Border,
+                link: None,
+            },
+            LayoutSpan {
+                content: title,
+                style: alert_style,
+                link: None,
+            },
+            LayoutSpan {
+                content: format!(" {}─", "─".repeat(fill)),
+                style: SemanticStyle::Border,
+                link: None,
+            },
+        ],
+    });
+
+    // 本文: 子blockを幅 width-2 でlayoutし、│ を付ける
+    let inner_indent = indent + 2;
+    let inner_width = available_width(ctx, inner_indent);
+    for child in &alert.children {
+        let inner = layout_block_at(child, ctx, inner_indent);
+        let child_lines = match inner {
+            LayoutBlock::Text(text_block) => text_block.lines,
+            LayoutBlock::Code(code) => code
+                .lines
+                .into_iter()
+                .map(|source_line| plain_line(source_line, SemanticStyle::Code))
+                .collect(),
+            LayoutBlock::Table(table) => table.lines,
+            LayoutBlock::Rule(rule) => vec![rule_line('─', inner_width.min(rule.width))],
+        };
+        lines.extend(child_lines.into_iter().map(prefix_alert_bar));
+    }
+
+    // 下枠: ╰────
+    lines.push(LayoutLine {
+        spans: vec![LayoutSpan {
+            content: format!("╰{}", "─".repeat(width.saturating_sub(1))),
+            style: SemanticStyle::Border,
+            link: None,
+        }],
+    });
+
+    TextBlock { lines }
+}
+
+/// 行頭に `│ `（Border style）を付ける。空行にも付けて枠を連続させる（§27）。
+fn prefix_alert_bar(line: LayoutLine) -> LayoutLine {
+    let mut spans = vec![LayoutSpan {
+        content: "│ ".to_string(),
+        style: SemanticStyle::Border,
+        link: None,
+    }];
+    spans.extend(line.spans);
+    LayoutLine { spans }
+}
+
+fn alert_style_of(kind: AlertKind) -> SemanticStyle {
+    match kind {
+        AlertKind::Note => SemanticStyle::AlertNote,
+        AlertKind::Tip => SemanticStyle::AlertTip,
+        AlertKind::Important => SemanticStyle::AlertImportant,
+        AlertKind::Warning => SemanticStyle::AlertWarning,
+        AlertKind::Caution => SemanticStyle::AlertCaution,
     }
 }
 
@@ -101,6 +197,7 @@ fn layout_blockquote(quote: &BlockQuote, ctx: &LayoutContext, indent: usize) -> 
                     lines.push(plain_line(source_line, SemanticStyle::Code));
                 }
             }
+            LayoutBlock::Table(table) => lines.extend(table.lines),
             LayoutBlock::Rule(rule) => lines.push(rule_line('─', rule.width)),
         }
     }
@@ -214,6 +311,12 @@ fn layout_list_item(
                         let _ = rule;
                         lines.push(indent_line(rule_line('─', 8), content_indent));
                     }
+                    LayoutBlock::Table(table) => {
+                        for mut line in table.lines {
+                            line = indent_line(line, indent + marker_width);
+                            lines.push(line);
+                        }
+                    }
                 }
             }
         }
@@ -290,6 +393,11 @@ mod tests {
                 .map(|l| l.spans.iter().map(|s| s.content.as_str()).collect())
                 .collect(),
             LayoutBlock::Code(cl) => cl.lines.clone(),
+            LayoutBlock::Table(tl) => tl
+                .lines
+                .iter()
+                .map(|l| l.spans.iter().map(|s| s.content.as_str()).collect())
+                .collect(),
             LayoutBlock::Rule(rule) => vec!["─".repeat(rule.width)],
         }
     }
@@ -487,5 +595,67 @@ mod tests {
         let first_span = &text_block.lines[0].spans[0];
         assert_eq!(first_span.content, "│ ");
         assert_eq!(first_span.style, SemanticStyle::Quote);
+    }
+
+    // ---- Sprint 3（S3-4, §84） ----
+
+    #[test]
+    fn alert_renders_frame_with_title() {
+        // §27: ╭─ WARNING ─ 枠
+        let lines = parse_and_layout("> [!WARNING]\n> Dangerous\n");
+        assert!(lines[0].starts_with("╭─ WARNING ─"), "got: {}", lines[0]);
+        assert_eq!(lines[1], "│ Dangerous");
+        assert!(lines[2].starts_with('╰'));
+    }
+
+    #[test]
+    fn alert_title_uses_alert_style() {
+        let source = mdsee_core::SourceDocument {
+            content: "> [!TIP]\n> hint\n".to_string(),
+            origin: mdsee_core::Origin::Stdin {
+                cwd: std::env::temp_dir(),
+            },
+        };
+        let document = mdsee_core::parse(&source).unwrap();
+        let laid = crate::layout(
+            &document,
+            &LayoutOptions {
+                terminal_width: 40,
+                max_width: 100,
+                margin: 2,
+            },
+        )
+        .unwrap();
+        let LayoutBlock::Text(text_block) = &laid.blocks[0] else {
+            panic!("expected text block");
+        };
+        let title_span = &text_block.lines[0].spans[1];
+        assert_eq!(title_span.content, "TIP");
+        assert_eq!(title_span.style, SemanticStyle::AlertTip);
+    }
+
+    #[test]
+    fn code_block_with_japanese_keeps_lines_verbatim() {
+        // §84: コード内日本語。折返し・正規化をしない
+        let source = mdsee_core::SourceDocument {
+            content: "```text\n日本語コード その１\n全角空白　入り\n```\n".to_string(),
+            origin: mdsee_core::Origin::Stdin {
+                cwd: std::env::temp_dir(),
+            },
+        };
+        let document = mdsee_core::parse(&source).unwrap();
+        let laid = crate::layout(
+            &document,
+            &LayoutOptions {
+                terminal_width: 40,
+                max_width: 100,
+                margin: 2,
+            },
+        )
+        .unwrap();
+        let LayoutBlock::Code(code) = &laid.blocks[0] else {
+            panic!("expected code block");
+        };
+        assert_eq!(code.lines, ["日本語コード その１", "全角空白　入り"]);
     }
 }
