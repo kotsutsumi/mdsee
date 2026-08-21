@@ -43,19 +43,20 @@ fn layout_heading(heading: &Heading, ctx: &LayoutContext) -> TextBlock {
 
     let mut lines = wrap_inlines(&inlines, width, style);
     match heading.level {
-        1 => lines.push(rule_line('━', width, style)),
-        2 => lines.push(rule_line('─', width, style)),
+        // 罫線のstyleは§19のとおりheadingではなくBorderを使う
+        1 => lines.push(rule_line('━', width)),
+        2 => lines.push(rule_line('─', width)),
         _ => {}
     }
     TextBlock { lines }
 }
 
-fn rule_line(ch: char, width: usize, style: SemanticStyle) -> LayoutLine {
+fn rule_line(ch: char, width: usize) -> LayoutLine {
     let content: String = std::iter::repeat_n(ch, width).collect();
     LayoutLine {
         spans: vec![LayoutSpan {
             content,
-            style,
+            style: SemanticStyle::Border,
             link: None,
         }],
     }
@@ -115,6 +116,18 @@ mod tests {
         assert_eq!(lines[0], "MDSEE");
         assert_eq!(lines[1].chars().next(), Some('━'));
         assert_eq!(lines[1].chars().count(), 36); // 40 - margin 2*2
+    }
+
+    #[test]
+    fn rule_lines_use_border_style() {
+        // §19: 罫線はheading styleではなくBorderを使う
+        for level in [1, 2] {
+            let LayoutBlock::Text(text_block) = layout_block(&heading(level, "T"), &ctx()) else {
+                panic!("expected text block");
+            };
+            let rule = &text_block.lines.last().unwrap().spans[0];
+            assert_eq!(rule.style, SemanticStyle::Border);
+        }
     }
 
     #[test]

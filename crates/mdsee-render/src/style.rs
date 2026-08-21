@@ -88,6 +88,7 @@ pub(crate) fn style_spec(style: SemanticStyle) -> StyleSpec {
         },
         SemanticStyle::Quote => StyleSpec::fg(Rgb(139, 148, 158)),
         SemanticStyle::Code => StyleSpec::fg(Rgb(166, 173, 186)),
+        SemanticStyle::Border => StyleSpec::fg(Rgb(48, 54, 61)),
 
         SemanticStyle::AlertNote => StyleSpec::fg(Rgb(88, 166, 255)),
         SemanticStyle::AlertTip => StyleSpec::fg(Rgb(63, 185, 80)),
