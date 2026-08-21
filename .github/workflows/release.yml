@@ -1,0 +1,67 @@
+# Release build（design.md §86〜§89）。
+#
+# tag push（v*）で §86 の5 target をbuildし、§87 の名前でartifactを
+# GitHub Release へ添付する。Homebrew buildでは全部入りbinary
+# （--all-features）を配布する（§92）。
+#
+# Homebrew tap（§88, §89）: tap repository（homebrew-tap）の作成後、
+# 末尾の `bump-homebrew` job で version / URL / SHA256 を自動更新する。
+# tap repository が存在しない間は job を skippable にしてある。
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - name: Build and upload binary
+        uses: taiki-e/upload-rust-binary-action@v1
+        with:
+          # §92: Homebrew buildでは全部入り（--all-features）
+          args: --all-features
+          target: ${{ matrix.target }}
+          # §87: 中身は mdsee / README.md / LICENSE
+          include: README.md,LICENSE
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  # §88, §89: Homebrew tapの自動更新。**自動更新は未有効**。
+  # tap repository（homebrew-tap）作成後に version / URL / SHA256 の
+  # 自動更新を実装して有効化する。それまでは何もしない。
+  bump-homebrew:
+    name: bump homebrew tap (not yet enabled)
+    needs: build
+    runs-on: ubuntu-latest
+    if: ${{ github.repository == 'kotsutsumi/mdsee' }}
+    steps:
+      - name: No-op until tap repository exists
+        run: |
+          echo "homebrew-tap repository が未作成のため skip する（§88, §89）。"
+          echo "Formula の自動更新は未有効。tap repo 作成後にこの job を置き換える。"

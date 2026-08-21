@@ -1,0 +1,47 @@
+  mdsee
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Beautiful Markdown in your terminal.
+
+  Bold, italic, strike, inline code, and a link <https://github.com/kotsutsumi/mdsee>.
+
+  Installation
+  ────────────────────────────────────────────────────────
+
+  Install with Homebrew or cargo:
+
+  ╭─ sh ──────────────────────────────────────────────────
+  │ brew install owner/tap/mdsee
+  ╰───────────────────────────────────────────────────────
+
+  Features
+  ────────────────────────────────────────────────────────
+
+  • GFM Markdown
+  • Syntax highlighting
+  • Terminal hyperlinks
+  • Tables
+  • Reader mode
+
+  ### Task list
+
+  ☑ parse markdown
+  ☐ render images
+
+  ╭─ TIP ─────────────────────────────────────────────────
+  │ Pipe works too: cat README.md | mdsee
+  ╰───────────────────────────────────────────────────────
+
+  Comparison
+  ────────────────────────────────────────────────────────
+
+  ┌──────────┬───────┬─────┐
+  │ Feature  │ mdsee │ cat │
+  ├──────────┼───────┼─────┤
+  │ markdown │  yes  │  no │
+  │ color    │  yes  │  no │
+  └──────────┴───────┴─────┘
+
+  ────────────────────────────────────────────────────────
+
+  See the docs <https://github.com/kotsutsumi/mdsee> for details.
