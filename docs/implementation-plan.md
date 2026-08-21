@@ -93,7 +93,7 @@ cargo test --workspace        # parser・wrapping の単体テストが通る
 | S2-2 | Blockquote。`│` prefix、nested quote対応 | §26 | mdsee-layout |
 | S2-3 | HorizontalRule | §11, §17 | mdsee-layout |
 | S2-4 | LinkとOSC 8。`TerminalCapabilities.osc8` 判定、plain fallbackは `text <URL>` | §33, §34 | mdsee-render / mdsee-terminal |
-| S2-5 | TerminalCapabilities基本。TTY判定、columns / rows、`ColorLevel`。環境変数（`NO_COLOR` / `COLORTERM` / `TERM` / `TERM_PROGRAM`）。passive detectionのみ | §34, §35, §37 | mdsee-terminal |
+| S2-5 | TerminalCapabilities基本。TTY判定、columns / rows、`ColorLevel`。環境変数（`NO_COLOR` / `COLORTERM` / `TERM` / `TERM_PROGRAM`）。passive detectionのみ。Sprint 1が幅取得のため先行導入した `terminal_columns()` はここへ統合する | §34, §35, §37 | mdsee-terminal |
 | S2-6 | 自動モード判定。`OutputMode`（Print / Reader / Plain）。stdout非TTY → Plain | §8 | mdsee-cli |
 | S2-7 | Pipe behavior。非TTY時にANSI OFF / OSC8 OFF / images OFF / reader OFF | §71 | mdsee-cli / mdsee-render |
 | S2-8 | `--plain` / `--force-color` / `--no-color` / `--width` / `--max-width` / `--theme` / `--detect-terminal` を追加。`--detect-terminal` はpassive detection結果を出力するに留め、active queryはSprint 4（S4-1）で導入。`NO_COLOR` は `--force-color` でのみ上書き | §7, §72, §37 | mdsee-cli |
