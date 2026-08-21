@@ -18,12 +18,12 @@ repository = "https://github.com/kotsutsumi/mdsee"
 
 [workspace.dependencies]
 # mdsee crates
-mdsee-core = { path = "crates/mdsee-core" }
-mdsee-layout = { path = "crates/mdsee-layout" }
-mdsee-render = { path = "crates/mdsee-render" }
-mdsee-terminal = { path = "crates/mdsee-terminal" }
-mdsee-image = { path = "crates/mdsee-image" }
-mdsee-reader = { path = "crates/mdsee-reader" }
+mdsee-core = { version = "0.1.0", path = "crates/mdsee-core" }
+mdsee-layout = { version = "0.1.0", path = "crates/mdsee-layout" }
+mdsee-render = { version = "0.1.0", path = "crates/mdsee-render" }
+mdsee-terminal = { version = "0.1.0", path = "crates/mdsee-terminal" }
+mdsee-image = { version = "0.1.0", path = "crates/mdsee-image" }
+mdsee-reader = { version = "0.1.0", path = "crates/mdsee-reader" }
 
 # 技術スタック（design.md §3）
 clap = { version = "4.6", features = ["derive"] }
