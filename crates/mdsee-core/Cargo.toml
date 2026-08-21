@@ -1,0 +1,11 @@
+[package]
+name = "mdsee-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Markdown parsing and internal AST for mdsee"
+
+[dependencies]
+comrak.workspace = true
+thiserror.workspace = true

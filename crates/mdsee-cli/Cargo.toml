@@ -1,0 +1,20 @@
+[package]
+name = "mdsee-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Markdown viewer for your terminal"
+
+[[bin]]
+name = "mdsee"
+path = "src/main.rs"
+
+[dependencies]
+mdsee-core.workspace = true
+mdsee-layout.workspace = true
+mdsee-render.workspace = true
+mdsee-terminal.workspace = true
+
+clap.workspace = true
+anyhow.workspace = true

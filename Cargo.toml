@@ -1,0 +1,46 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/mdsee-core",
+    "crates/mdsee-layout",
+    "crates/mdsee-render",
+    "crates/mdsee-terminal",
+    "crates/mdsee-image",
+    "crates/mdsee-reader",
+    "crates/mdsee-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/kotsutsumi/mdsee"
+
+[workspace.dependencies]
+# mdsee crates
+mdsee-core = { path = "crates/mdsee-core" }
+mdsee-layout = { path = "crates/mdsee-layout" }
+mdsee-render = { path = "crates/mdsee-render" }
+mdsee-terminal = { path = "crates/mdsee-terminal" }
+mdsee-image = { path = "crates/mdsee-image" }
+mdsee-reader = { path = "crates/mdsee-reader" }
+
+# 技術スタック（design.md §3）
+clap = { version = "4.6", features = ["derive"] }
+comrak = "0.54"
+crossterm = "0.29"
+ratatui = "0.30"
+syntect = "5"
+unicode-width = "0.2"
+unicode-segmentation = "1.13"
+image = "0.25"
+resvg = "0.48"
+usvg = "0.48"
+reqwest = "0.13"
+notify = "8"
+serde = { version = "1", features = ["derive"] }
+toml = "1"
+thiserror = "2"
+anyhow = "1"
+directories = "6"
+sha2 = "0.11"
