@@ -1,10 +1,11 @@
 [package]
-name = "mdsee-cli"
+name = "mdsee"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Markdown viewer for your terminal"
+readme = "../../README.md"
 
 [[bin]]
 name = "mdsee"

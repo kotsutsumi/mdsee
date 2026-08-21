@@ -2054,6 +2054,9 @@ cargo install mdsee
 
 をサポート。
 
+実装上のmanifestは `crates/mdsee-cli/Cargo.toml` に置くが、公開package名は
+`mdsee`、binary名も `mdsee` とする。
+
 crates.io package名も可能なら `mdsee` を確保する。
 
 **リリース条件**: v0.1リリース時は `cargo publish --dry-run` が成功することと、crates.io上の `mdsee` 名の公開確認（未登録であることの再確認とpublish）をリリース条件とする。2026-08時点で `mdsee` はcrates.ioに未登録（取得可能）を確認済み。

@@ -13,7 +13,7 @@ const MDSEE_CRATES: [&str; 7] = [
     "mdsee-terminal",
     "mdsee-image",
     "mdsee-reader",
-    "mdsee-cli",
+    "mdsee",
 ];
 
 /// §101で許可されるmdsee系への依存。
@@ -39,7 +39,7 @@ fn allowed_mdsee_deps(crate_name: &str) -> &'static [&'static str] {
             "mdsee-terminal",
             "mdsee-image",
         ],
-        "mdsee-cli" => &[
+        "mdsee" => &[
             "mdsee-core",
             "mdsee-layout",
             "mdsee-render",

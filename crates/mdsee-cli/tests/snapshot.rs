@@ -7,7 +7,7 @@
 //! snapshotの更新:
 //!
 //! ```sh
-//! MDSEE_UPDATE_SNAPSHOTS=1 cargo test -p mdsee-cli --test snapshot
+//! MDSEE_UPDATE_SNAPSHOTS=1 cargo test -p mdsee --test snapshot
 //! ```
 
 use std::fs;
