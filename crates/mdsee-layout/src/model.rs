@@ -77,6 +77,8 @@ pub enum SemanticStyle {
 
     Code,
 
+    Border,
+
     AlertNote,
     AlertTip,
     AlertImportant,
