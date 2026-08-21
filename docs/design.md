@@ -113,7 +113,8 @@ Rich Document。
 * Math
 * remote images
 * watch mode
-* document cache
+
+cacheは §76 のとおり、v0.xではimage cacheのみ実装する。
 
 ### 3. 技術スタック
 
@@ -747,26 +748,16 @@ max_width = 100
 
 ### 22. Margin
 
-デフォルトでは、
-
-```text
-terminal <= 100
-    margin 1
-
-terminal > 100
-    center content
-```
-
-ただしCLIツールなので過剰な中央寄せは避ける。
-
-推奨：
+デフォルト：
 
 ```text
 left margin = 2
 right margin = 2
 ```
 
-Reader時のみcenter layoutを許可する。
+`config.layout.margin`（§64）で変更できる。
+
+Print modeでは中央寄せしない。center layoutはReaderのみ許可する。
 
 ### 23. Paragraph Wrapping
 
