@@ -100,6 +100,10 @@ fn normalize_ansi(input: &str) -> String {
     out
 }
 
+fn normalize_line_endings(input: &str) -> String {
+    input.replace("\r\n", "\n")
+}
+
 fn check_snapshot(name: &str, kind: &str, content: String) {
     let path = snapshots_dir().join(format!("{name}.{kind}.txt"));
     if std::env::var("MDSEE_UPDATE_SNAPSHOTS").is_ok() {
@@ -112,7 +116,12 @@ fn check_snapshot(name: &str, kind: &str, content: String) {
             path.display()
         )
     });
-    assert_eq!(content, expected, "snapshot mismatch: {}", path.display());
+    assert_eq!(
+        normalize_line_endings(&content),
+        normalize_line_endings(&expected),
+        "snapshot mismatch: {}",
+        path.display()
+    );
 }
 
 fn snapshot_test(name: &str) {
