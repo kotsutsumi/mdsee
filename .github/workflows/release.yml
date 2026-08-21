@@ -52,11 +52,11 @@ jobs:
           include: README.md,LICENSE
           token: ${{ secrets.GITHUB_TOKEN }}
 
-  # §88, §89: Homebrew tapの自動更新。
-  # homebrew-tap repository作成後に HOMEBREW_TAP_TOKEN secret を設定して
-  # 有効化すること。それまでは何もしない。
+  # §88, §89: Homebrew tapの自動更新。**自動更新は未有効**。
+  # tap repository（homebrew-tap）作成後に version / URL / SHA256 の
+  # 自動更新を実装して有効化する。それまでは何もしない。
   bump-homebrew:
-    name: bump homebrew tap
+    name: bump homebrew tap (not yet enabled)
     needs: build
     runs-on: ubuntu-latest
     if: ${{ github.repository == 'kotsutsumi/mdsee' }}
@@ -64,5 +64,4 @@ jobs:
       - name: No-op until tap repository exists
         run: |
           echo "homebrew-tap repository が未作成のため skip する（§88, §89）。"
-          echo "作成後: Repository Dispatch / PAT で Formula/mdsee.rb の"
-          echo "version / URL / SHA256 を自動更新する job をここへ実装する。"
+          echo "Formula の自動更新は未有効。tap repo 作成後にこの job を置き換える。"
