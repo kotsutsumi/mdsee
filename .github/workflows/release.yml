@@ -46,7 +46,7 @@ jobs:
         uses: taiki-e/upload-rust-binary-action@v1
         with:
           # §92: Homebrew buildでは全部入り（--all-features）
-          args: --all-features
+          all-features: true
           target: ${{ matrix.target }}
           # §87: 中身は mdsee / README.md / LICENSE
           include: README.md,LICENSE
